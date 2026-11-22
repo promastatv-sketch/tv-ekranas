@@ -160,7 +160,9 @@ public class PhotoServer {
                     sb.append('"').append(list.get(i).getName()).append('"');
                 }
                 sb.append("],\"interval\":").append(storage.interval());
-                sb.append(",\"logo\":").append(storage.logo() != null).append('}');
+                sb.append(",\"logo\":").append(storage.logo() != null);
+                sb.append(",\"brk\":").append(storage.breakImage() != null);
+                sb.append(",\"breakSec\":").append(storage.breakSeconds()).append('}');
                 sendJson(out, 200, sb.toString());
             } else if (method.equals("GET") && path.equals("/api/photo")) {
                 File f = storage.photo(q.get("n"));
@@ -170,6 +172,29 @@ public class PhotoServer {
                 File f = storage.logo();
                 if (f == null) send(out, 404, "text/plain", new byte[0]);
                 else sendFile(out, "image/png", f);
+            } else if (method.equals("GET") && path.equals("/api/break")) {
+                File f = storage.breakImage();
+                if (f == null) send(out, 404, "text/plain", new byte[0]);
+                else sendFile(out, "image/jpeg", f);
+            } else if (method.equals("POST") && path.equals("/api/break")) {
+                if (len <= 0 || len > MAX_UPLOAD) {
+                    sendJson(out, 400, "{\"ok\":false,\"error\":\"size\"}");
+                    return;
+                }
+                storage.saveBreak(in, len);
+                changed();
+                sendJson(out, 200, "{\"ok\":true}");
+            } else if (method.equals("POST") && path.equals("/api/break/delete")) {
+                storage.deleteBreak();
+                changed();
+                sendJson(out, 200, "{\"ok\":true}");
+            } else if (method.equals("POST") && path.equals("/api/breaksec")) {
+                try {
+                    storage.setBreakSeconds(Integer.parseInt(q.get("s")));
+                } catch (Exception ignored) {
+                }
+                changed();
+                sendJson(out, 200, "{\"ok\":true}");
             } else if (method.equals("POST") && path.equals("/api/upload")) {
                 if (len <= 0 || len > MAX_UPLOAD) {
                     sendJson(out, 400, "{\"ok\":false,\"error\":\"size\"}");

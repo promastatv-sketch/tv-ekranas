@@ -16,6 +16,7 @@ import java.util.Random;
 public class Storage {
     private final File dir;
     private final File logo;
+    private final File breakImg;
     private final File tmpDir;
     private final SharedPreferences prefs;
     private final Random random = new Random();
@@ -24,6 +25,7 @@ public class Storage {
         dir = new File(c.getFilesDir(), "photos");
         tmpDir = new File(c.getFilesDir(), "tmp");
         logo = new File(c.getFilesDir(), "logo.png");
+        breakImg = new File(c.getFilesDir(), "break.jpg");
         dir.mkdirs();
         tmpDir.mkdirs();
         prefs = c.getSharedPreferences("cfg", Context.MODE_PRIVATE);
@@ -70,15 +72,41 @@ public class Storage {
     }
 
     public void saveLogo(InputStream in, long len) throws IOException {
-        File tmp = new File(tmpDir, "logo.tmp");
+        replace(in, len, logo);
+    }
+
+    public void saveBreak(InputStream in, long len) throws IOException {
+        replace(in, len, breakImg);
+    }
+
+    private void replace(InputStream in, long len, File target) throws IOException {
+        File tmp = new File(tmpDir, target.getName() + ".tmp");
         copy(in, len, tmp);
         synchronized (this) {
-            logo.delete();
-            if (!tmp.renameTo(logo)) {
+            target.delete();
+            if (!tmp.renameTo(target)) {
                 tmp.delete();
                 throw new IOException("rename failed");
             }
         }
+    }
+
+    public synchronized File breakImage() {
+        return breakImg.exists() ? breakImg : null;
+    }
+
+    public synchronized void deleteBreak() {
+        breakImg.delete();
+    }
+
+    public int breakSeconds() {
+        return prefs.getInt("breakSec", 3);
+    }
+
+    public void setBreakSeconds(int s) {
+        if (s < 1) s = 1;
+        if (s > 120) s = 120;
+        prefs.edit().putInt("breakSec", s).apply();
     }
 
     private static void copy(InputStream in, long len, File target) throws IOException {

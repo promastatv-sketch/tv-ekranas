@@ -64,11 +64,12 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
     private boolean showing = false;
     private String lastUrl = null;
     private long logoStamp = -1;
+    private boolean onBreak = false;
 
     private final Runnable nextRunnable = new Runnable() {
         @Override
         public void run() {
-            showStep(1);
+            advance();
         }
     };
 
@@ -376,39 +377,58 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
             } else {
                 // naujas intervalas ar sąrašas – tęsiame nuo dabartinės vietos
                 handler.removeCallbacks(nextRunnable);
-                handler.postDelayed(nextRunnable, Shared.storage.interval() * 1000L);
+                handler.postDelayed(nextRunnable, (onBreak ? Shared.storage.breakSeconds() : Shared.storage.interval()) * 1000L);
             }
         }
     }
 
+    /** Po kiekvienos nuotraukos parodoma tarpinė nuotrauka (jei įkelta). */
+    private void advance() {
+        File b = Shared.storage.breakImage();
+        if (b != null && !onBreak && !photos.isEmpty()) {
+            handler.removeCallbacks(nextRunnable);
+            Bitmap bmp = decode(b);
+            if (bmp != null) {
+                display(bmp);
+                onBreak = true;
+                handler.postDelayed(nextRunnable, Shared.storage.breakSeconds() * 1000L);
+                return;
+            }
+        }
+        showStep(1);
+    }
+
     private void showStep(int dir) {
         handler.removeCallbacks(nextRunnable);
+        onBreak = false;
         if (photos.isEmpty()) return;
         int n = photos.size();
         index = ((index + dir) % n + n) % n;
         Bitmap bmp = decode(photos.get(index));
-        if (bmp != null) {
-            final ImageView back = slides[1 - front];
-            final ImageView old = slides[front];
-            back.animate().cancel();
-            old.animate().cancel();
-            back.setImageBitmap(bmp);
-            back.bringToFront();
-            logoView.bringToFront();
-            emptyPanel.bringToFront();
-            infoPanel.bringToFront();
-            menuPanel.bringToFront();
-            back.setAlpha(0f);
-            back.animate().alpha(1f).setDuration(900).withEndAction(new Runnable() {
-                @Override
-                public void run() {
-                    old.setAlpha(0f);
-                    old.setImageDrawable(null);
-                }
-            }).start();
-            front = 1 - front;
-        }
+        if (bmp != null) display(bmp);
         handler.postDelayed(nextRunnable, bmp == null ? 500 : Shared.storage.interval() * 1000L);
+    }
+
+    private void display(Bitmap bmp) {
+        final ImageView back = slides[1 - front];
+        final ImageView old = slides[front];
+        back.animate().cancel();
+        old.animate().cancel();
+        back.setImageBitmap(bmp);
+        back.bringToFront();
+        logoView.bringToFront();
+        emptyPanel.bringToFront();
+        infoPanel.bringToFront();
+        menuPanel.bringToFront();
+        back.setAlpha(0f);
+        back.animate().alpha(1f).setDuration(700).withEndAction(new Runnable() {
+            @Override
+            public void run() {
+                old.setAlpha(0f);
+                old.setImageDrawable(null);
+            }
+        }).start();
+        front = 1 - front;
     }
 
     private Bitmap decode(File f) {

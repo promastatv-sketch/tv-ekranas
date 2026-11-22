@@ -80,6 +80,24 @@
     </div>
 
     <div class="card">
+      <h2>🎄 Tarpinė nuotrauka (pvz. sveikinimas)</h2>
+      <p class="muted">Rodoma po kiekvienos nuotraukos.</p>
+      <div class="row">
+        <img id="brkPrev" alt="" style="display:none;max-height:70px;max-width:130px;border-radius:6px">
+        <label class="btn" for="brkFile" style="flex:0;white-space:nowrap">Įkelti</label>
+        <input type="file" id="brkFile" accept="image/*">
+        <button class="btn danger" id="brkDel" style="display:none">Pašalinti</button>
+      </div>
+      <div class="row" style="margin-top:12px">
+        <label>Kiek laiko rodyti</label>
+        <select id="breakSec">
+          <option value="2">2 s</option><option value="3">3 s</option><option value="5">5 s</option>
+          <option value="8">8 s</option><option value="10">10 s</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
       <div class="row">
         <h2 style="flex:1;margin:0">Nuotraukos televizoriuje (<span id="count">0</span>)</h2>
         <button class="btn danger" id="clear">Ištrinti visas</button>
@@ -139,6 +157,13 @@
         var no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
         el.appendChild(img); el.appendChild(b); el.appendChild(no); g.appendChild(el);
       });
+      if (d.breakSec) $('breakSec').value = String(d.breakSec);
+      if (d.brk) {
+        $('brkPrev').src = '/api/break?pin=' + encodeURIComponent(pin) + '&t=' + Date.now();
+        $('brkPrev').style.display = 'block'; $('brkDel').style.display = 'inline-block';
+      } else {
+        $('brkPrev').style.display = 'none'; $('brkDel').style.display = 'none';
+      }
       if (d.logo) {
         $('logoPrev').src = '/api/logo?pin=' + encodeURIComponent(pin) + '&t=' + Date.now();
         $('logoPrev').style.display = 'block'; $('logoDel').style.display = 'inline-block';
@@ -209,6 +234,20 @@
       .then(function (blob) { return api('/api/logo', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/png' } }); })
       .then(function () { statusEl.textContent = '✅ Logotipas įkeltas'; refresh(); })
       .catch(function () { statusEl.textContent = 'Nepavyko įkelti logotipo'; });
+  };
+  $('brkFile').onchange = function (ev) {
+    var f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+    if (!f) return;
+    statusEl.textContent = 'Siunčiama tarpinė nuotrauka…';
+    resize(f, 1920, 1080, 'image/jpeg', 0.9, true)
+      .then(function (blob) { return api('/api/break', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } }); })
+      .then(function () { statusEl.textContent = '✅ Tarpinė nuotrauka įkelta'; refresh(); })
+      .catch(function () { statusEl.textContent = 'Nepavyko įkelti'; });
+  };
+  $('brkDel').onclick = function () { api('/api/break/delete', { method: 'POST' }).then(refresh); };
+  $('breakSec').onchange = function () {
+    api('/api/breaksec?s=' + encodeURIComponent($('breakSec').value), { method: 'POST' })
+      .then(function () { statusEl.textContent = '✅ Laikas pakeistas'; });
   };
   $('logoDel').onclick = function () { api('/api/logo/delete', { method: 'POST' }).then(refresh); };
 
