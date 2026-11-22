@@ -51,8 +51,9 @@
 
   <div id="app" style="display:none">
     <div class="card">
-      <label class="big" for="files">➕ Pridėti nuotraukas</label>
-      <input type="file" id="files" accept="image/*" multiple>
+      <label class="big" for="files">➕ Pridėti nuotraukas ar video</label>
+      <input type="file" id="files" accept="image/*,video/*" multiple>
+      <p class="muted" style="margin:10px 0 0">Video rodomas iki galo. Geriausia trumpi (iki 1–2 min.) MP4 vaizdo įrašai.</p>
       <div class="bar" id="bar"><div></div></div>
       <div id="status"></div>
     </div>
@@ -65,6 +66,13 @@
           <option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option>
           <option value="30">30 s</option><option value="60">1 min</option>
         </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <label>Video garsas</label>
+        <select id="sound"><option value="0">Išjungtas</option><option value="1">Įjungtas</option></select>
       </div>
     </div>
 
@@ -150,13 +158,21 @@
       var g = $('grid'); g.innerHTML = '';
       d.photos.forEach(function (n, i) {
         var el = document.createElement('div'); el.className = 'ph';
-        var img = document.createElement('img'); img.loading = 'lazy';
-        img.src = '/api/photo?n=' + encodeURIComponent(n) + '&pin=' + encodeURIComponent(pin);
+        var img;
+        if (/\.mp4$/.test(n)) {
+          img = document.createElement('div');
+          img.textContent = '🎬 Video';
+          img.style.cssText = 'display:flex;align-items:center;justify-content:center;height:100%;font-size:15px;background:#26304a';
+        } else {
+          img = document.createElement('img'); img.loading = 'lazy';
+          img.src = '/api/photo?n=' + encodeURIComponent(n) + '&pin=' + encodeURIComponent(pin);
+        }
         var b = document.createElement('button'); b.textContent = '×'; b.title = 'Ištrinti';
         b.onclick = function () { api('/api/delete?n=' + encodeURIComponent(n), { method: 'POST' }).then(refresh); };
         var no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
         el.appendChild(img); el.appendChild(b); el.appendChild(no); g.appendChild(el);
       });
+      $('sound').value = d.sound ? '1' : '0';
       if (d.breakSec) $('breakSec').value = String(d.breakSec);
       if (d.brk) {
         $('brkPrev').src = '/api/break?pin=' + encodeURIComponent(pin) + '&t=' + Date.now();
@@ -213,8 +229,13 @@
     files.forEach(function (f) {
       chain = chain.then(function () {
         statusEl.textContent = 'Siunčiama ' + (done + 1) + ' iš ' + files.length + '…';
-        return resize(f, 1920, 1080, 'image/jpeg', 0.88, true)
-          .then(function (blob) { return api('/api/upload', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } }); })
+        var isVideo = (f.type || '').indexOf('video/') === 0;
+        var send = isVideo
+          ? api('/api/upload?type=video', { method: 'POST', body: f, headers: { 'Content-Type': 'application/octet-stream' } })
+          : resize(f, 1920, 1080, 'image/jpeg', 0.88, true)
+              .then(function (blob) { return api('/api/upload', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } }); });
+        if (isVideo) statusEl.textContent = 'Siunčiamas video ' + (done + 1) + ' iš ' + files.length + ' (gali užtrukti)…';
+        return send
           .catch(function (e) { if (e.message === 'pin') throw e; failed++; })
           .then(function () { done++; fillEl.style.width = (100 * done / files.length) + '%'; });
       });
@@ -243,6 +264,10 @@
       .then(function (blob) { return api('/api/break', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } }); })
       .then(function () { statusEl.textContent = '✅ Tarpinė nuotrauka įkelta'; refresh(); })
       .catch(function () { statusEl.textContent = 'Nepavyko įkelti'; });
+  };
+  $('sound').onchange = function () {
+    api('/api/sound?on=' + $('sound').value, { method: 'POST' })
+      .then(function () { statusEl.textContent = '✅ Garsas ' + ($('sound').value === '1' ? 'įjungtas' : 'išjungtas'); });
   };
   $('brkDel').onclick = function () { api('/api/break/delete', { method: 'POST' }).then(refresh); };
   $('breakSec').onchange = function () {

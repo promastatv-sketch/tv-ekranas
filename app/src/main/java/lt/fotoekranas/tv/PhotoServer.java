@@ -30,6 +30,7 @@ public class PhotoServer {
 
     private static final Charset UTF8 = Charset.forName("UTF-8");
     private static final long MAX_UPLOAD = 40L * 1024 * 1024;
+    private static final long MAX_VIDEO = 2000L * 1024 * 1024;
 
     private final int port;
     private final Storage storage;
@@ -162,12 +163,13 @@ public class PhotoServer {
                 sb.append("],\"interval\":").append(storage.interval());
                 sb.append(",\"logo\":").append(storage.logo() != null);
                 sb.append(",\"brk\":").append(storage.breakImage() != null);
-                sb.append(",\"breakSec\":").append(storage.breakSeconds()).append('}');
+                sb.append(",\"breakSec\":").append(storage.breakSeconds());
+                sb.append(",\"sound\":").append(storage.sound()).append('}');
                 sendJson(out, 200, sb.toString());
             } else if (method.equals("GET") && path.equals("/api/photo")) {
                 File f = storage.photo(q.get("n"));
                 if (f == null) send(out, 404, "text/plain", new byte[0]);
-                else sendFile(out, "image/jpeg", f);
+                else sendFile(out, Storage.isVideo(f) ? "video/mp4" : "image/jpeg", f);
             } else if (method.equals("GET") && path.equals("/api/logo")) {
                 File f = storage.logo();
                 if (f == null) send(out, 404, "text/plain", new byte[0]);
@@ -195,12 +197,18 @@ public class PhotoServer {
                 }
                 changed();
                 sendJson(out, 200, "{\"ok\":true}");
+            } else if (method.equals("POST") && path.equals("/api/sound")) {
+                storage.setSound("1".equals(q.get("on")));
+                changed();
+                sendJson(out, 200, "{\"ok\":true}");
             } else if (method.equals("POST") && path.equals("/api/upload")) {
-                if (len <= 0 || len > MAX_UPLOAD) {
+                boolean video = "video".equals(q.get("type"));
+                if (len <= 0 || len > (video ? MAX_VIDEO : MAX_UPLOAD)) {
                     sendJson(out, 400, "{\"ok\":false,\"error\":\"size\"}");
                     return;
                 }
-                String name = storage.savePhoto(in, len);
+                if (video) sock.setSoTimeout(300000);
+                String name = storage.savePhoto(in, len, video);
                 changed();
                 sendJson(out, 200, "{\"ok\":true,\"name\":\"" + name + "\"}");
             } else if (method.equals("POST") && path.equals("/api/logo")) {

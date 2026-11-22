@@ -35,7 +35,7 @@ public class Storage {
     }
 
     public static boolean validName(String n) {
-        return n != null && n.matches("[A-Za-z0-9_\\-]+\\.jpg");
+        return n != null && n.matches("[A-Za-z0-9_\\-]+\\.(jpg|mp4)");
     }
 
     public synchronized List<File> listPhotos() {
@@ -55,10 +55,14 @@ public class Storage {
         return f.exists() ? f : null;
     }
 
-    public String savePhoto(InputStream in, long len) throws IOException {
+    public static boolean isVideo(File f) {
+        return f.getName().endsWith(".mp4");
+    }
+
+    public String savePhoto(InputStream in, long len, boolean video) throws IOException {
         String name;
         synchronized (this) {
-            name = System.currentTimeMillis() + "_" + (1000 + random.nextInt(9000)) + ".jpg";
+            name = System.currentTimeMillis() + "_" + (1000 + random.nextInt(9000)) + (video ? ".mp4" : ".jpg");
         }
         File tmp = new File(tmpDir, name);
         copy(in, len, tmp);
@@ -153,6 +157,14 @@ public class Storage {
         if (s < 2) s = 2;
         if (s > 600) s = 600;
         prefs.edit().putInt("interval", s).apply();
+    }
+
+    public boolean sound() {
+        return prefs.getBoolean("sound", false);
+    }
+
+    public void setSound(boolean on) {
+        prefs.edit().putBoolean("sound", on).apply();
     }
 
     public String pin() {

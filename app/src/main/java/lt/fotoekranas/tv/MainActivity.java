@@ -24,6 +24,8 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.VideoView;
+import android.media.MediaPlayer;
 
 import com.google.zxing.BarcodeFormat;
 import com.google.zxing.EncodeHintType;
@@ -65,6 +67,8 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
     private String lastUrl = null;
     private long logoStamp = -1;
     private boolean onBreak = false;
+    private VideoView videoView;
+    private boolean playingVideo = false;
 
     private final Runnable nextRunnable = new Runnable() {
         @Override
@@ -118,6 +122,10 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
             root.addView(iv, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             slides[i] = iv;
         }
+
+        videoView = new VideoView(this);
+        videoView.setVisibility(View.GONE);
+        root.addView(videoView, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, Gravity.CENTER));
 
         logoView = new ImageView(this);
         logoView.setScaleType(ImageView.ScaleType.FIT_END);
@@ -297,6 +305,7 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         super.onPause();
         handler.removeCallbacks(nextRunnable);
         handler.removeCallbacks(networkCheck);
+        stopVideo();
         showing = false;
         if (Shared.server.getListener() == this) Shared.server.setListener(null);
     }
@@ -363,6 +372,7 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
             handler.removeCallbacks(nextRunnable);
             showing = false;
             index = -1;
+            stopVideo();
             for (ImageView iv : slides) {
                 iv.animate().cancel();
                 iv.setAlpha(0f);
@@ -374,6 +384,9 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
             if (!showing) {
                 showing = true;
                 showStep(1);
+            } else if (playingVideo) {
+                // video groja iki galo – nieko nekeičiame
+                if (videoView.isPlaying()) applyVolume();
             } else {
                 // naujas intervalas ar sąrašas – tęsiame nuo dabartinės vietos
                 handler.removeCallbacks(nextRunnable);
@@ -404,12 +417,84 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         if (photos.isEmpty()) return;
         int n = photos.size();
         index = ((index + dir) % n + n) % n;
-        Bitmap bmp = decode(photos.get(index));
+        File f = photos.get(index);
+        if (Storage.isVideo(f)) {
+            playVideo(f);
+            return;
+        }
+        Bitmap bmp = decode(f);
         if (bmp != null) display(bmp);
         handler.postDelayed(nextRunnable, bmp == null ? 500 : Shared.storage.interval() * 1000L);
     }
 
+    private MediaPlayer currentPlayer;
+
+    private void applyVolume() {
+        try {
+            if (currentPlayer != null) {
+                float v = Shared.storage.sound() ? 1f : 0f;
+                currentPlayer.setVolume(v, v);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void playVideo(File f) {
+        handler.removeCallbacks(nextRunnable);
+        for (ImageView iv : slides) {
+            iv.animate().cancel();
+            iv.setAlpha(0f);
+            iv.setImageDrawable(null);
+        }
+        playingVideo = true;
+        videoView.setVisibility(View.VISIBLE);
+        videoView.bringToFront();
+        logoView.bringToFront();
+        emptyPanel.bringToFront();
+        infoPanel.bringToFront();
+        menuPanel.bringToFront();
+        videoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+            @Override
+            public void onPrepared(MediaPlayer mp) {
+                currentPlayer = mp;
+                applyVolume();
+            }
+        });
+        videoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+            @Override
+            public void onCompletion(MediaPlayer mp) {
+                currentPlayer = null;
+                advance();
+            }
+        });
+        videoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+            @Override
+            public boolean onError(MediaPlayer mp, int what, int extra) {
+                currentPlayer = null;
+                handler.removeCallbacks(nextRunnable);
+                handler.postDelayed(nextRunnable, 300);
+                return true;
+            }
+        });
+        videoView.setVideoPath(f.getAbsolutePath());
+        videoView.start();
+        // apsauga, jei video "užstrigtų"
+        handler.postDelayed(nextRunnable, 15 * 60 * 1000L);
+    }
+
+    private void stopVideo() {
+        if (!playingVideo) return;
+        playingVideo = false;
+        currentPlayer = null;
+        try {
+            videoView.stopPlayback();
+        } catch (Exception ignored) {
+        }
+        videoView.setVisibility(View.GONE);
+    }
+
     private void display(Bitmap bmp) {
+        stopVideo();
         final ImageView back = slides[1 - front];
         final ImageView old = slides[front];
         back.animate().cancel();
