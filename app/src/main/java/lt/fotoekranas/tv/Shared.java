@@ -9,6 +9,7 @@ final class Shared {
     static final int PORT = 8080;
     static Storage storage;
     static PhotoServer server;
+    static int localVersion;
 
     private Shared() {
     }
@@ -16,6 +17,7 @@ final class Shared {
     static synchronized void init(Context c) {
         Context app = c.getApplicationContext();
         if (storage == null) storage = new Storage(app);
+        localVersion = Updater.localVersion(app);
         if (server == null) {
             server = new PhotoServer(PORT, storage, app.getAssets());
             server.start();

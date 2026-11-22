@@ -60,6 +60,7 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
     private TextView infoText;
 
     private LinearLayout menuPanel;
+    private TextView statusText;
 
     private List<File> photos = new ArrayList<>();
     private int index = -1;
@@ -81,6 +82,32 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         @Override
         public void run() {
             infoPanel.setVisibility(View.GONE);
+        }
+    };
+
+    private final Runnable hideStatusRunnable = new Runnable() {
+        @Override
+        public void run() {
+            statusText.setVisibility(View.GONE);
+        }
+    };
+
+    private final Runnable updateCheck = new Runnable() {
+        @Override
+        public void run() {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    Updater.fetchRemoteVersion();
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            updateAddress();
+                        }
+                    });
+                }
+            }, "update-check").start();
+            handler.postDelayed(this, 6L * 60 * 60 * 1000);
         }
     };
 
@@ -172,6 +199,17 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         plp.setMargins(dp(32), 0, 0, dp(32));
         root.addView(infoPanel, plp);
 
+        // Būsenos pranešimas (atnaujinimui)
+        statusText = new TextView(this);
+        statusText.setTextColor(Color.WHITE);
+        statusText.setTextSize(20);
+        statusText.setBackgroundColor(0xEE1F2A44);
+        statusText.setPadding(dp(24), dp(14), dp(24), dp(14));
+        statusText.setVisibility(View.GONE);
+        FrameLayout.LayoutParams slp = new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
+        slp.setMargins(0, dp(32), 0, 0);
+        root.addView(statusText, slp);
+
         // Meniu (atsiranda paspaudus Atgal)
         menuPanel = new LinearLayout(this);
         menuPanel.setOrientation(LinearLayout.VERTICAL);
@@ -203,6 +241,13 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
             public void run() {
                 hideMenu();
                 openOverlayPermission();
+            }
+        });
+        addMenuButton("Atnaujinti programėlę", new Runnable() {
+            @Override
+            public void run() {
+                hideMenu();
+                startUpdate();
             }
         });
         addMenuButton("TV nustatymai", new Runnable() {
@@ -248,6 +293,38 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
     private void hideMenu() {
         menuPanel.setVisibility(View.GONE);
         hideSystemUi();
+    }
+
+    private void showStatus(final String text) {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                statusText.setText(text);
+                statusText.setVisibility(View.VISIBLE);
+                statusText.bringToFront();
+                handler.removeCallbacks(hideStatusRunnable);
+                handler.postDelayed(hideStatusRunnable, 10000);
+            }
+        });
+    }
+
+    private void startUpdate() {
+        Updater.run(this, new Updater.Callback() {
+            @Override
+            public void status(String text) {
+                showStatus(text);
+            }
+        });
+    }
+
+    @Override
+    public void onUpdateRequested() {
+        runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                startUpdate();
+            }
+        });
     }
 
     private void showInfo(long ms) {
@@ -298,6 +375,8 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         Shared.server.setListener(this);
         reload();
         handler.post(networkCheck);
+        handler.removeCallbacks(updateCheck);
+        handler.postDelayed(updateCheck, 5000);
     }
 
     @Override
@@ -305,6 +384,7 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         super.onPause();
         handler.removeCallbacks(nextRunnable);
         handler.removeCallbacks(networkCheck);
+        handler.removeCallbacks(updateCheck);
         stopVideo();
         showing = false;
         if (Shared.server.getListener() == this) Shared.server.setListener(null);
@@ -555,6 +635,9 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
         String url = ip == null ? null : "http://" + ip + ":" + Shared.PORT + "/?pin=" + pin;
         String hint = overlayAllowed() ? "" :
                 "\n\nKad skaidrės atsidarytų pačios pabudus TV: spauskite pultelio „Atgal“ → „Leisti atsidaryti pabudus TV“.";
+        if (Updater.remoteVersion > Shared.localVersion) {
+            hint += "\n\n⬆ Yra nauja versija: „Atgal“ → „Atnaujinti programėlę“.";
+        }
 
         if (url == null) {
             emptyQr.setVisibility(View.GONE);
@@ -569,7 +652,8 @@ public class MainActivity extends Activity implements PhotoServer.Listener {
                 + "Telefonas turi būti tame pačiame Wi-Fi tinkle.\n\n"
                 + "Arba naršyklėje įveskite:\n" + plain + "\nPIN: " + pin + hint);
         infoText.setText("Įkelti nuotraukas:\n" + plain + "\nPIN: " + pin
-                + "\n\n◀ ▶  ankstesnė / kita\nAtgal – meniu");
+                + "\n\n◀ ▶  ankstesnė / kita\nAtgal – meniu"
+                + (Updater.remoteVersion > Shared.localVersion ? "\n⬆ Yra nauja versija" : ""));
         if (!url.equals(lastUrl)) {
             lastUrl = url;
             Bitmap q = qr(url, 400);

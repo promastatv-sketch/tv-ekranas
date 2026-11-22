@@ -50,6 +50,11 @@
   </div>
 
   <div id="app" style="display:none">
+    <div class="card" id="updBox" style="display:none;border:1px solid var(--accent)">
+      <h2>⬆ Yra nauja TV programėlės versija</h2>
+      <button class="big" id="updBtn" style="padding:14px;font-size:16px">Atnaujinti televizoriuje</button>
+      <p class="muted" style="margin-bottom:0">Po to televizoriaus pulteliu paspauskite „Įdiegti“ (Install).</p>
+    </div>
     <div class="card">
       <label class="big" for="files">➕ Pridėti nuotraukas ar video</label>
       <input type="file" id="files" accept="image/*,video/*" multiple>
@@ -173,6 +178,7 @@
         el.appendChild(img); el.appendChild(b); el.appendChild(no); g.appendChild(el);
       });
       $('sound').value = d.sound ? '1' : '0';
+      $('updBox').style.display = d.update ? 'block' : 'none';
       if (d.breakSec) $('breakSec').value = String(d.breakSec);
       if (d.brk) {
         $('brkPrev').src = '/api/break?pin=' + encodeURIComponent(pin) + '&t=' + Date.now();
@@ -264,6 +270,12 @@
       .then(function (blob) { return api('/api/break', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } }); })
       .then(function () { statusEl.textContent = '✅ Tarpinė nuotrauka įkelta'; refresh(); })
       .catch(function () { statusEl.textContent = 'Nepavyko įkelti'; });
+  };
+  $('updBtn').onclick = function () {
+    api('/api/update', { method: 'POST' }).then(function () {
+      statusEl.textContent = '⬆ Atnaujinimas pradėtas – žiūrėkite į televizorių ir paspauskite „Įdiegti“.';
+      window.scrollTo(0, 0);
+    });
   };
   $('sound').onchange = function () {
     api('/api/sound?on=' + $('sound').value, { method: 'POST' })

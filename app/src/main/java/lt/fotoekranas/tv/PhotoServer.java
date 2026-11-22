@@ -26,6 +26,8 @@ public class PhotoServer {
 
     public interface Listener {
         void onPhotosChanged();
+
+        void onUpdateRequested();
     }
 
     private static final Charset UTF8 = Charset.forName("UTF-8");
@@ -164,7 +166,8 @@ public class PhotoServer {
                 sb.append(",\"logo\":").append(storage.logo() != null);
                 sb.append(",\"brk\":").append(storage.breakImage() != null);
                 sb.append(",\"breakSec\":").append(storage.breakSeconds());
-                sb.append(",\"sound\":").append(storage.sound()).append('}');
+                sb.append(",\"sound\":").append(storage.sound());
+                sb.append(",\"update\":").append(Updater.remoteVersion > Shared.localVersion).append('}');
                 sendJson(out, 200, sb.toString());
             } else if (method.equals("GET") && path.equals("/api/photo")) {
                 File f = storage.photo(q.get("n"));
@@ -197,6 +200,10 @@ public class PhotoServer {
                 }
                 changed();
                 sendJson(out, 200, "{\"ok\":true}");
+            } else if (method.equals("POST") && path.equals("/api/update")) {
+                Listener l = listener;
+                if (l != null) l.onUpdateRequested();
+                sendJson(out, 200, "{\"ok\":" + (l != null) + "}");
             } else if (method.equals("POST") && path.equals("/api/sound")) {
                 storage.setSound("1".equals(q.get("on")));
                 changed();
