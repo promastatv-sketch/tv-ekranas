@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Foto ekranas</title>
+<style>
+  :root { --bg:#0f1420; --card:#1a2133; --text:#f2f4f8; --muted:#9aa4b8; --accent:#3d8bfd; --danger:#e5484d; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  header { padding:20px 18px 8px; }
+  h1 { margin:0; font-size:22px; }
+  .sub { color:var(--muted); font-size:14px; margin-top:4px; }
+  main { padding:10px 14px 40px; max-width:720px; margin:0 auto; }
+  .card { background:var(--card); border-radius:16px; padding:16px; margin-bottom:14px; }
+  .big { display:block; width:100%; padding:18px; font-size:18px; font-weight:600; border:0; border-radius:14px;
+         background:var(--accent); color:#fff; text-align:center; cursor:pointer; }
+  .btn { padding:10px 14px; border-radius:10px; border:1px solid #33405c; background:transparent; color:var(--text); font-size:15px; }
+  .btn.danger { border-color:var(--danger); color:var(--danger); }
+  .row { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+  .row label { flex:1; color:var(--muted); }
+  select { font-size:16px; padding:8px; border-radius:10px; background:#0f1420; color:var(--text); border:1px solid #33405c; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(100px,1fr)); gap:8px; margin-top:12px; }
+  .ph { position:relative; aspect-ratio:16/9; background:#000; border-radius:8px; overflow:hidden; }
+  .ph img { width:100%; height:100%; object-fit:cover; }
+  .ph button { position:absolute; top:4px; right:4px; width:30px; height:30px; border-radius:15px; border:0;
+               background:rgba(0,0,0,.7); color:#fff; font-size:18px; line-height:30px; padding:0; }
+  .ph .no { position:absolute; left:6px; bottom:4px; font-size:12px; background:rgba(0,0,0,.6); padding:1px 6px; border-radius:6px; }
+  #status { margin-top:10px; color:var(--muted); min-height:20px; }
+  .bar { height:8px; background:#0f1420; border-radius:4px; overflow:hidden; margin-top:8px; display:none; }
+  .bar div { height:100%; width:0; background:var(--accent); transition:width .2s; }
+  #logoPrev { max-height:60px; max-width:180px; display:none; background:#fff2; border-radius:6px; padding:4px; }
+  input[type=file] { display:none; }
+  #pinBox input { font-size:22px; padding:10px; width:140px; letter-spacing:4px; text-align:center; border-radius:10px; border:1px solid #33405c; background:#0f1420; color:#fff; }
+  h2 { font-size:16px; margin:0 0 10px; }
+  .muted { color:var(--muted); font-size:14px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>📺 Foto ekranas</h1>
+  <div class="sub">Nuotraukos iš karto rodomos televizoriuje</div>
+</header>
+<main>
+
+  <div class="card" id="pinBox" style="display:none">
+    <h2>Įveskite PIN kodą</h2>
+    <p class="muted">PIN rodomas televizoriaus ekrane (paspauskite pultelio OK).</p>
+    <div class="row"><input id="pinInput" inputmode="numeric" maxlength="4"><button class="btn" id="pinOk">Gerai</button></div>
+  </div>
+
+  <div id="app" style="display:none">
+    <div class="card">
+      <label class="big" for="files">➕ Pridėti nuotraukas</label>
+      <input type="file" id="files" accept="image/*" multiple>
+      <div class="bar" id="bar"><div></div></div>
+      <div id="status"></div>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <label>Kiek laiko rodyti vieną nuotrauką</label>
+        <select id="interval">
+          <option value="3">3 s</option><option value="5">5 s</option><option value="8">8 s</option>
+          <option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option>
+          <option value="30">30 s</option><option value="60">1 min</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Logotipas ekrano kampe</h2>
+      <div class="row">
+        <img id="logoPrev" alt="">
+        <label class="btn" for="logoFile" style="flex:0">Įkelti logotipą</label>
+        <input type="file" id="logoFile" accept="image/*">
+        <button class="btn danger" id="logoDel" style="display:none">Pašalinti</button>
+      </div>
+      <p class="muted">Geriausiai tinka PNG su permatomu fonu.</p>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <h2 style="flex:1;margin:0">Nuotraukos televizoriuje (<span id="count">0</span>)</h2>
+        <button class="btn danger" id="clear">Ištrinti visas</button>
+      </div>
+      <div class="grid" id="grid"></div>
+    </div>
+  </div>
+
+</main>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var pin = params.get('pin') || '';
+  function store(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  if (pin) store('pin', pin); else pin = load('pin');
+
+  var $ = function (id) { return document.getElementById(id); };
+  var statusEl = $('status');
+
+  function api(path, opts) {
+    opts = opts || {};
+    opts.headers = Object.assign({ 'X-Pin': pin }, opts.headers || {});
+    return fetch(path, opts).then(function (r) {
+      if (r.status === 403) { askPin(); throw new Error('pin'); }
+      return r.json();
+    });
+  }
+
+  function askPin() {
+    $('app').style.display = 'none';
+    $('pinBox').style.display = 'block';
+  }
+  $('pinOk').onclick = function () {
+    pin = $('pinInput').value.trim();
+    store('pin', pin);
+    refresh();
+  };
+
+  function refresh() {
+    return api('/api/list').then(function (d) {
+      $('pinBox').style.display = 'none';
+      $('app').style.display = 'block';
+      $('interval').value = String(d.interval);
+      if (!$('interval').value) {
+        var o = document.createElement('option'); o.value = d.interval; o.textContent = d.interval + ' s';
+        $('interval').appendChild(o); $('interval').value = String(d.interval);
+      }
+      $('count').textContent = d.photos.length;
+      var g = $('grid'); g.innerHTML = '';
+      d.photos.forEach(function (n, i) {
+        var el = document.createElement('div'); el.className = 'ph';
+        var img = document.createElement('img'); img.loading = 'lazy';
+        img.src = '/api/photo?n=' + encodeURIComponent(n) + '&pin=' + encodeURIComponent(pin);
+        var b = document.createElement('button'); b.textContent = '×'; b.title = 'Ištrinti';
+        b.onclick = function () { api('/api/delete?n=' + encodeURIComponent(n), { method: 'POST' }).then(refresh); };
+        var no = document.createElement('span'); no.className = 'no'; no.textContent = i + 1;
+        el.appendChild(img); el.appendChild(b); el.appendChild(no); g.appendChild(el);
+      });
+      if (d.logo) {
+        $('logoPrev').src = '/api/logo?pin=' + encodeURIComponent(pin) + '&t=' + Date.now();
+        $('logoPrev').style.display = 'block'; $('logoDel').style.display = 'inline-block';
+      } else {
+        $('logoPrev').style.display = 'none'; $('logoDel').style.display = 'none';
+      }
+    }).catch(function (e) {
+      if (e.message !== 'pin') statusEl.textContent = 'Nepavyko prisijungti prie televizoriaus. Ar telefonas tame pačiame Wi-Fi?';
+    });
+  }
+
+  function loadImage(file) {
+    if (window.createImageBitmap) {
+      return createImageBitmap(file, { imageOrientation: 'from-image' }).catch(function () { return loadTag(file); });
+    }
+    return loadTag(file);
+  }
+  function loadTag(file) {
+    return new Promise(function (res, rej) {
+      var url = URL.createObjectURL(file), img = new Image();
+      img.onload = function () { res(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('img')); };
+      img.src = url;
+    });
+  }
+
+  function resize(file, maxW, maxH, type, quality, fill) {
+    return loadImage(file).then(function (src) {
+      var w = src.width || src.naturalWidth, h = src.height || src.naturalHeight;
+      var s = Math.min(1, maxW / w, maxH / h);
+      var cw = Math.round(w * s), ch = Math.round(h * s);
+      var c = document.createElement('canvas'); c.width = cw; c.height = ch;
+      var ctx = c.getContext('2d');
+      if (fill) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, cw, ch); }
+      ctx.drawImage(src, 0, 0, cw, ch);
+      return new Promise(function (res) { c.toBlob(res, type, quality); });
+    });
+  }
+
+  $('files').onchange = function (ev) {
+    var files = Array.prototype.slice.call(ev.target.files || []);
+    ev.target.value = '';
+    if (!files.length) return;
+    var bar = $('bar'), fillEl = bar.firstElementChild, done = 0, failed = 0;
+    bar.style.display = 'block'; fillEl.style.width = '0';
+    var chain = Promise.resolve();
+    files.forEach(function (f) {
+      chain = chain.then(function () {
+        statusEl.textContent = 'Siunčiama ' + (done + 1) + ' iš ' + files.length + '…';
+        return resize(f, 1920, 1080, 'image/jpeg', 0.88, true)
+          .then(function (blob) { return api('/api/upload', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/jpeg' } }); })
+          .catch(function (e) { if (e.message === 'pin') throw e; failed++; })
+          .then(function () { done++; fillEl.style.width = (100 * done / files.length) + '%'; });
+      });
+    });
+    chain.then(function () {
+      statusEl.textContent = '✅ Išsiųsta: ' + (done - failed) + (failed ? ' · nepavyko: ' + failed : '');
+      setTimeout(function () { bar.style.display = 'none'; }, 1500);
+      refresh();
+    }).catch(function () {});
+  };
+
+  $('logoFile').onchange = function (ev) {
+    var f = ev.target.files && ev.target.files[0]; ev.target.value = '';
+    if (!f) return;
+    statusEl.textContent = 'Siunčiamas logotipas…';
+    resize(f, 600, 300, 'image/png', 1, false)
+      .then(function (blob) { return api('/api/logo', { method: 'POST', body: blob, headers: { 'Content-Type': 'image/png' } }); })
+      .then(function () { statusEl.textContent = '✅ Logotipas įkeltas'; refresh(); })
+      .catch(function () { statusEl.textContent = 'Nepavyko įkelti logotipo'; });
+  };
+  $('logoDel').onclick = function () { api('/api/logo/delete', { method: 'POST' }).then(refresh); };
+
+  $('interval').onchange = function () {
+    api('/api/interval?s=' + encodeURIComponent($('interval').value), { method: 'POST' })
+      .then(function () { statusEl.textContent = '✅ Laikas pakeistas'; });
+  };
+
+  $('clear').onclick = function () {
+    if (!confirm('Ištrinti visas nuotraukas iš televizoriaus?')) return;
+    api('/api/clear', { method: 'POST' }).then(refresh);
+  };
+
+  if (!pin) askPin(); else refresh();
+})();
+</script>
+</body>
+</html>
